@@ -61,10 +61,9 @@ def plotData(naics, category):
     overall_cap = overall_cap.drop(['Industry', 'Series ID'], axis = 0)
     overall_cap.index = pd.to_datetime(overall_cap.index, format = '%Y%m')
     overall_cap = overall_cap.iloc[84:96] #Data for 2018
-    print(overall_cap)
+
     monthly_energy = energy_process(category)
     monthly_energy = monthly_energy.iloc[0:11] #Data for 2018
-    print(monthly_energy)
 
     #make a figure
     plt.figure(figsize=(5,3))
@@ -123,4 +122,3 @@ naics = [311] #Naics code for agriculture
 category = [40211,1004,480691] #Category IDs for Total Industrial Energy, Industrial electricity sales, Industrial natural gas consumption
 plotData(naics, category)
 #print(codecheck(naics))
-#print(energy_process(category))
