@@ -3,6 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import ind_output as ind
 from datetime import date
+import matplotlib.ticker as ticker
 
 def process(naics):
     #Gets data and organizes it. Takes average of capacity data and sum of emissions. Also gets all NAICS codes from FRED and EPA.
@@ -40,9 +41,10 @@ def energy_process(category):
     #Finds percentage of total energy not accounted for by sales and gas data
     for year in sum.index:
         for state in states:
-            percent.loc[year, state] = 1 - (sum.loc[year, state] / energy.loc[str(year), state])
+            percent.loc[year, state] = sum.loc[year, state] / energy.loc[str(year), state]
+    percent_energy = 1 - percent
 
-    monthly_energy = sum.multiply(percent) / 12 #Average total energy not in sales and gas per month
+    monthly_energy = energy.multiply(percent_energy) / 12 #Average total energy not in sales and gas per month
     monthly = monthly_sales.add(monthly_gas, fill_value = 0)
     #Gets total monthly energy
     for dates in monthly.index:
@@ -52,7 +54,7 @@ def energy_process(category):
     monthly = monthly.drop(monthly.columns[0], axis = 1)
     monthly = monthly.sum(axis = 1) #Combines all states to get national total
 
-    return monthly
+    return monthly, percent
 
 def plotData(naics, category):
 
@@ -62,8 +64,11 @@ def plotData(naics, category):
     overall_cap.index = pd.to_datetime(overall_cap.index, format = '%Y%m')
     overall_cap = overall_cap.iloc[84:96] #Data for 2018
 
-    monthly_energy = energy_process(category)
-    monthly_energy = monthly_energy.iloc[0:11] #Data for 2018
+    monthly_energy, percent = energy_process(category)
+    monthly_energy = monthly_energy.iloc[0:12] #Data for 2018
+    monthly_energy = monthly_energy.sort_index()
+    percent = percent.iloc[0]
+    percent = percent.transpose()
 
     #make a figure
     plt.figure(figsize=(5,3))
@@ -89,20 +94,35 @@ def plotData(naics, category):
     fig2.autofmt_xdate()
     fig2.suptitle('2018 National Industrial Capacity Utilization and Energy Use')
 
-    ax2.plot(overall_cap.index, overall_cap.values, color = 'blue', marker = 'o', label = 'Capacity')
-    ax2.set_xlabel('Date')
-    ax2.set_ylabel('Percent of Capacity')
+    ax2.scatter(overall_cap.values,monthly_energy.values)
+    ax2.set_xlabel('Capacity')
+    ax2.set_ylabel('Energy')
 
-    ax3 = ax2.twinx()
-    ax3.plot(monthly_energy.index, monthly_energy.values, color = 'green', marker = 'o', label = 'Energy')
-    ax3.set_ylabel('Energy Consumption (billion Btu)')
-
-    h1, l1 = ax2.get_legend_handles_labels()
-    h2, l2 = ax3.get_legend_handles_labels()
-    ax2.legend(h1+h2, l1+l2, loc='upper center', ncol=2)
-
-    plt.subplots_adjust(right = .88)
     plt.savefig("Ind_cap_energy.png", dpi=300)
+
+    plt.figure(figsize=(25,3))
+    fig3, ax3 = plt.subplots()
+    fig3.suptitle('2018 Percentage of Energy Use from Electricity and Natural Gas by State')
+
+    #ax3.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax3.bar(percent.index, percent.values)
+    ax3.set_xlabel('State')
+    ax3.set_ylabel('Percent of Total Energy')
+    plt.xticks(rotation = 90, fontsize = 6)
+
+    plt.savefig("State_sales_gas.png", dpi=300)
+
+    # ax2.plot(overall_cap.index, overall_cap.values, color = 'blue', marker = 'o', label = 'Capacity')
+    # ax2.set_xlabel('Date')
+    # ax2.set_ylabel('Percent of Capacity')
+    #
+    # ax3 = ax2.twinx()
+    # ax3.plot(monthly_energy.index, monthly_energy.values, color = 'green', marker = 'o', label = 'Energy')
+    # ax3.set_ylabel('Energy Consumption (billion Btu)')
+    #
+    # h1, l1 = ax2.get_legend_handles_labels()
+    # h2, l2 = ax3.get_legend_handles_labels()
+    # ax2.legend(h1+h2, l1+l2, loc='upper center', ncol=2)
 
 def codecheck(naics):
     #Gets all data in Fred and EPA and checks NAICS codes
