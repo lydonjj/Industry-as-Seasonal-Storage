@@ -11,6 +11,7 @@ class Fred_data(object):
     def __init__(self, naics):
         self.naics = naics
 
+    #Gets FRED data and processes
     def findData(self):
         #Gets the series under Indusdrial Production & Capacity Utilization
         fred = Fred(api_key='e0a47670a791268b5b30cdf7cc217c4c')
@@ -24,7 +25,7 @@ class Fred_data(object):
         #Gets the NAICS codes and series IDs for each series
         naics_code = series['title'].str.extract(r'\= (.{3})') #Some have pt. before ). Need to fix
         naics_code = naics_code.rename(columns = {0:'NAICS Code'})
-        naics_code['NAICS Code'] = pd.to_numeric(naics_code['NAICS Code'])
+        naics_code['NAICS Code'] = pd.to_numeric(naics_code['NAICS Code'], downcast = 'integer')
         series['title'] = series['title'].str.replace(r'\(([^)]+)\)','')
         series_id = series.index.tolist()
 
@@ -32,11 +33,11 @@ class Fred_data(object):
         dataset = pd.DataFrame(series.iloc[:,3])
         dataset = naics_code.merge(dataset, left_index=True, right_index=True)
 
-        #Gets data for each series from Jan 2015 through 2018 (to match epa data)
+        #Gets data for each series from 1997 through 2018
         data = {}
         count = 0
         for id in series.index:
-            data[id] = fred.get_series(id, observation_start='2011-01-01', observation_end='2018-12-01')
+            data[id] = fred.get_series(id, observation_start='1997-01-01', observation_end='2019-12-01')
             count += 1
             if count == len(series)/2:
                 time.sleep(10)
@@ -47,16 +48,16 @@ class Fred_data(object):
         data_id = data.transpose()
         dataset['Series ID'] = series_id
         dataset = dataset.merge(data_id, left_index=True,right_index=True)
-        naics_code = naics_code['NAICS Code'].tolist()
-        dataset.index = naics_code
+        dataset.index = naics_code['NAICS Code'].tolist()
         dataset = dataset.drop('NAICS Code',1)
         dataset = dataset.sort_index()
         dataset = dataset.rename(columns = {'title':'Industry'})
 
         return dataset
 
+    #Retrieves data for specified NAICS code
     def getData(self):
-        #Retrieves data for specified NAICS code
+
         dataset = self.findData()
         data = dataset.loc[self.naics]
 
@@ -66,8 +67,9 @@ class EPA_data(object):
     def __init__(self, naics):
         self.naics = naics
 
+    #Gets data from EPA summary spreadsheet and creates dataframe with NAICS code as index
     def findData(self):
-        #Gets data from EPA summary spreadsheet and creates dataframe with NAICS code as index
+
         epa_data = pd.read_excel(r'/Users/John/Documents/Energy Research/2018_data_summary_spreadsheets/ghgp_data_by_year.xlsx',
         sheet_name='Direct Emitters', header=3, usecols='K,M:U', index_col=0)
         ids = epa_data.index.tolist()
@@ -80,8 +82,9 @@ class EPA_data(object):
 
         return epa_data
 
+    #Retrieves data for specified NAICS code
     def getData(self):
-        #Retrieves data for specified NAICS code
+
         dataset = self.findData()
         data = dataset.loc[self.naics]
 
@@ -91,8 +94,9 @@ class EIA_data(object):
     def __init__(self, category):
          self.category = category
 
+    #Gets data from EIA. Searches by category and gets series in each category
     def getData(self):
-        #Gets data from EIA. Searches by category and gets series in each category
+
         myapikey = 'ba1be1ff6d258c3b793079d6fbc47131'
 
         cat = api.Category(category_id=self.category,apikey=myapikey)
@@ -134,11 +138,12 @@ class EIA_data(object):
 
         return dataset
 
+    #Sums monthly data to convert to annual
     def sumData(self):
-        #Sums monthly data to convert to annual
-        dataset = self.getData()
 
+        dataset = self.getData()
         sum = pd.DataFrame()
+
         for dates in dataset.index:
             year = dates.year
             if year == 2019 or year == 2020:
@@ -148,3 +153,38 @@ class EIA_data(object):
         sum = sum.transpose()
 
         return sum, dataset
+
+#Gets GDP data from BEA spreadsheets and finds state contributions to national GDP by industry
+def BEA_getData():
+    #states = ['AK', 'AL', 'AR','AZ','CA','CO','CT','DC','DE','FL',
+    #'GA','HI','IA','ID','IL','IN','KS','KY','LA','MA','MD','ME',
+    #'MI','MN','MO','MS','MT','NC','ND','NE','NH','NJ','NM','NV',
+    #'NY','OH','OK','OR','PA','RI','SC','SD','TN','TX','US','UT',
+    #'VA','VT','WA','WI','WV','WY']
+    gdp_data = pd.read_excel(r'/Users/John/Documents/Energy Research/SAGDP2N.xls',
+    header = 5, usecols = 'A,B,D:AA', keep_default_na = False)
+
+    gdp_data = gdp_data.replace(to_replace = '(L)', value = 0)
+    gdp_num = gdp_data.drop(columns = ['NAICS','GeoName','Description'])
+
+    #Finds the percentage of National GDP contributed by each State for each industry
+    count = 0
+    tot = 0
+    years = 0
+    for ids in gdp_num.index:
+        if ids > 1141:
+            id = ids
+        for col in gdp_num.columns:
+            gdp_data.iloc[ids,years+3] = float(gdp_num.iloc[ids,years]) / float(gdp_num.iloc[tot,years]) #Divides each states gdp by national
+            years += 1
+        count += 1
+        years = 0
+        tot += 1
+        if count == 22:
+            tot = 0
+            count = 0
+
+    gdp_data.index = gdp_data['NAICS'].tolist()
+    gdp_data = gdp_data.drop('NAICS',1)
+
+    return gdp_data
